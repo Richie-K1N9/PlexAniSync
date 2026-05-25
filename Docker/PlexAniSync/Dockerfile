@@ -32,6 +32,7 @@ ENV PLEX_SECTION=Anime \
 COPY PlexAniSync.py requirements.txt custom_mappings_schema.json Docker/PlexAniSync/run/. /plexanisync/
 COPY plexanisync /plexanisync/plexanisync
 
-LABEL org.opencontainers.image.documentation=https://github.com/RickDB/PlexAniSync/blob/master/Docker/PlexAniSync/README.md
+LABEL org.opencontainers.image.documentation=https://github.com/Richie-K1N9/PlexAniSync/blob/master/Docker/PlexAniSync/README.md
+LABEL org.opencontainers.image.source=https://github.com/Richie-K1N9/PlexAniSync
 
 CMD ["/plexanisync/runsync.sh"]

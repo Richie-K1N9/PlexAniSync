@@ -7,8 +7,10 @@ from time import sleep
 import coloredlogs
 
 from plexanisync.anilist import Anilist
+from plexanisync.cache import SyncCache
 from plexanisync.custom_mappings import read_custom_mappings
 from plexanisync.plexmodule import PlexModule
+from plexanisync.webhook import Notifier
 from plexanisync._version import __version__
 
 # Logger settings
@@ -48,6 +50,7 @@ else:
 settings = read_settings(SETTINGS_FILE)
 anilist_settings = settings["ANILIST"]
 plex_settings = settings["PLEX"]
+notification_settings = settings["NOTIFICATIONS"] if settings.has_section("NOTIFICATIONS") else None
 
 
 ## Startup section ##
@@ -67,32 +70,49 @@ def start():
             "Plex episode watched count will take priority over AniList, this will always update AniList watched count over Plex data"
         )
 
-    anilist = Anilist(anilist_settings, custom_mappings)
-    anilist_series = anilist.process_user_list()
+    notifier = Notifier(notification_settings)
+    notifier.attach_to_logger(logger)
 
-    # Plex
-    if anilist_series is None:
-        logger.error(
-            "Unable to retrieve AniList list, check your username and access token"
-        )
-    else:
-        # Wait a few a seconds to make sure Plex has processed watched states
-        sleep(5.0)
-        plexmodule = PlexModule(plex_settings)
-        plex_anime_series = plexmodule.get_anime_shows_filter(show_title)
+    cache = SyncCache(
+        anilist_settings.get("cache_db_path", "plexanisync_cache.db"),
+        max_age_days=anilist_settings.getint("cache_max_age_days", 14),
+        full_refresh_hours=anilist_settings.getint("anilist_cache_full_refresh_hours", 24),
+        session_marker_path=anilist_settings.get("cache_session_marker_path", "") or None,
+    )
 
-        if plex_anime_series is None:
-            logger.error("Found no Plex shows for processing")
-            plex_series_watched = None
+    try:
+        anilist = Anilist(anilist_settings, custom_mappings, cache=cache, notifier=notifier)
+        anilist_series = anilist.process_user_list()
+
+        # Plex
+        if anilist_series is None:
+            logger.error(
+                "Unable to retrieve AniList list, check your username and access token"
+            )
         else:
-            plex_series_watched = plexmodule.get_watched_shows(plex_anime_series)
+            # Wait a few a seconds to make sure Plex has processed watched states
+            sleep(5.0)
+            plexmodule = PlexModule(plex_settings)
+            plex_anime_series = plexmodule.get_anime_shows_filter(show_title)
 
-        if plex_series_watched is None:
-            logger.error("Found no watched shows on Plex for processing")
-        else:
-            anilist.match_to_plex(anilist_series, plex_series_watched)
+            if plex_anime_series is None:
+                logger.error("Found no Plex shows for processing")
+                plex_series_watched = None
+            else:
+                plex_series_watched = plexmodule.get_watched_shows(plex_anime_series)
 
-        logger.info("Plex to AniList sync finished")
+            if plex_series_watched is None:
+                logger.error("Found no watched shows on Plex for processing")
+            else:
+                anilist.match_to_plex(anilist_series, plex_series_watched)
+
+            logger.info("Plex to AniList sync finished")
+    finally:
+        cache.close()
+        try:
+            notifier.flush()
+        finally:
+            notifier.detach_from_logger(logger)
 
 
 if __name__ == "__main__":

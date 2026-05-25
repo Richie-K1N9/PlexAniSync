@@ -2,7 +2,7 @@
 from configparser import SectionProxy
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 import base64
 import json
 import logging
@@ -14,8 +14,21 @@ from sgqlc.operation import Operation
 
 from plexanisync.anilist_schema import anilist_schema as schema
 from plexanisync.logger_adapter import PrefixLoggerAdapter
+from plexanisync.webhook import NOTIFY_CATEGORY, NOTIFY_FLAG, CATEGORY_AUTH
 
 logger = PrefixLoggerAdapter(logging.getLogger("PlexAniSync"), {"prefix": "GRAPHQL"})
+
+
+class RateLimitExhaustedError(Exception):
+    """Raised when 429 retries are exhausted for a single request."""
+
+
+class TerminalGraphQLError(Exception):
+    """Raised when the AniList API returns an error that retrying won't fix
+    (bad query, auth failure, etc.)."""
+
+
+_TERMINAL_STATUSES = {400, 401, 403, 404}
 
 
 @dataclass
@@ -65,6 +78,9 @@ class GraphQL:
         self.endpoint.logger = logger
         self.skip_list_update = self.anilist_settings.getboolean("skip_list_update", False)
         self.sync_ratings = self.anilist_settings.getboolean("sync_ratings", False)
+        self.max_rate_limit_retries = self.anilist_settings.getint("max_rate_limit_retries", 8)
+        self.max_rate_limit_wait_seconds = self.anilist_settings.getint("max_rate_limit_wait_seconds", 300)
+        self.max_transient_error_retries = self.anilist_settings.getint("max_transient_error_retries", 10)
 
     def check_token_expiry(self, anilist_token):
         # pad the body with == so the base64 pad validation always passes
@@ -73,6 +89,10 @@ class GraphQL:
         token_expiry = int(anilist_token_body["exp"])
         if datetime.fromtimestamp(token_expiry) < datetime.now():
             # token expired in the past
+            logger.error(
+                "Anilist token is expired",
+                extra={NOTIFY_FLAG: True, NOTIFY_CATEGORY: CATEGORY_AUTH},
+            )
             raise RuntimeError("Anilist token is expired")
 
     def search_by_id(self, anilist_id: int):
@@ -120,9 +140,21 @@ class GraphQL:
         return list(map(self.__mediaitem_to_object, media))
 
     def fetch_user_list(self) -> List[AnilistSeries]:
+        return self.fetch_user_list_filtered(None)
+
+    def fetch_user_list_filtered(self, statuses: Optional[List[str]]) -> List[AnilistSeries]:
+        """Fetch the user's AniList collection, optionally filtered to specific list statuses.
+
+        statuses=None fetches every list (legacy behaviour). Passing e.g.
+        ["CURRENT", "REPEATING", "PAUSED"] restricts the query to the active lists,
+        which the cache layer uses to refresh only entries that can change.
+        """
         operation = Operation(schema.Query)
         user_name = self.anilist_settings.get("username")
-        lists = operation.media_list_collection(user_name=user_name, type="ANIME").lists
+        kwargs = {"user_name": user_name, "type": "ANIME"}
+        if statuses:
+            kwargs["status_in"] = list(statuses)
+        lists = operation.media_list_collection(**kwargs).lists
         lists.__fields__('name', 'status', 'is_custom_list')
         lists.entries.__fields__('id', 'progress', 'status', 'repeat')
         lists.entries.score(format="POINT_100")
@@ -189,27 +221,51 @@ class GraphQL:
         self.__send_graphql_request(op)
 
     def __send_graphql_request(self, operation):
-        retries = 10
+        rate_limit_attempts = 0
+        transient_attempts = 0
 
         while True:
             data = self.endpoint(operation)
-            if "errors" in data:
-                error = data["errors"][0]
-                status = error["status"]
-                if status == 429:
-                    wait_time = int(data["headers"].get('retry-after', 0))
-                    logger.warning(f"Rate limit hit, waiting for {wait_time}s")
-                    time.sleep(wait_time + 1)
-
-                elif retries > 0:
-                    retries = retries - 1
-                    time.sleep(1)
-                else:
-                    raise data["exception"]
-            else:
+            if "errors" not in data:
                 # wait a bit to not overload AniList API
                 time.sleep(0.2)
                 return data
+
+            error = data["errors"][0]
+            status = error.get("status")
+
+            if status == 429:
+                requested_wait = int(data.get("headers", {}).get('retry-after', 0) or 0)
+                wait_time = min(requested_wait, self.max_rate_limit_wait_seconds)
+                # Keep the historical wording so existing log monitors / tests still match.
+                logger.warning(f"Rate limit hit, waiting for {wait_time}s")
+                time.sleep(wait_time + 1)
+                rate_limit_attempts += 1
+                if rate_limit_attempts >= self.max_rate_limit_retries:
+                    raise RateLimitExhaustedError(
+                        f"AniList rate limit retries exhausted after {rate_limit_attempts} attempts"
+                    )
+                continue
+
+            if status in _TERMINAL_STATUSES:
+                message = error.get("message") or str(error)
+                category = CATEGORY_AUTH if status in (401, 403) else None
+                extra = {NOTIFY_FLAG: True, NOTIFY_CATEGORY: category} if category else None
+                logger.error(
+                    f"AniList returned terminal error HTTP {status}: {message}",
+                    extra=extra or {},
+                )
+                raise TerminalGraphQLError(f"HTTP {status}: {message}")
+
+            transient_attempts += 1
+            if transient_attempts >= self.max_transient_error_retries:
+                raise data["exception"]
+            backoff = min(60, 2 ** transient_attempts)
+            logger.warning(
+                f"Transient AniList error (HTTP {status}), retry "
+                f"{transient_attempts}/{self.max_transient_error_retries} in {backoff}s"
+            )
+            time.sleep(backoff)
 
     def __mediaitem_to_object(self, media_item) -> AnilistSeries:
         anilist_id = media_item.id

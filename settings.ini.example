@@ -27,3 +27,41 @@ skip_list_update = False
 username = SomeUsername
 log_failed_matches = False
 sync_ratings = False
+
+# --- Local cache (reduces redundant AniList API calls) ---
+# Path to the SQLite file. Leave empty or set to ":memory:" to disable persistence.
+cache_db_path = plexanisync_cache.db
+# How often to perform a full AniList list refresh (in hours). Between refreshes
+# only the active lists (CURRENT, REPEATING, PAUSED) are fetched and merged with
+# cached COMPLETED/DROPPED/PLANNING entries.
+anilist_cache_full_refresh_hours = 24
+# Hard expiry: regardless of restarts, the entire cache is wiped after this many days.
+cache_max_age_days = 14
+# Marker file used to detect container/host restarts. Must live somewhere ephemeral
+# (e.g. /tmp inside Docker). Leave blank to use the system default.
+cache_session_marker_path =
+# When True, collapse per-episode incremental updates into a single mutation —
+# trades the per-episode AniList activity feed for a large reduction in API calls.
+batch_episode_updates = False
+
+# --- Retry / rate-limit resilience ---
+# Maximum 429 retries for a single request before raising RateLimitExhaustedError.
+# That one show is skipped; the rest of the sync continues.
+max_rate_limit_retries = 8
+# Cap on how long to honour AniList's retry-after header (seconds). Prevents
+# pathological waits if the API returns an absurd value.
+max_rate_limit_wait_seconds = 300
+# Retries for transient (non-429) errors. Backoff is exponential, capped at 60s.
+max_transient_error_retries = 10
+
+[NOTIFICATIONS]
+# Optional webhook URL. POSTed once at the end of every sync with any
+# year-mismatch, title-not-found, auth-failure, or per-show errors that occurred.
+# Rate-limit messages are deliberately NOT sent here.
+# Leave blank to disable.
+webhook_url =
+# Payload shape: "discord" sends {"content": ...}, "slack" sends {"text": ...}.
+webhook_format = discord
+# Minimum severity to forward. "error" (default) excludes warning-level events;
+# set to "warning" to also receive year-mismatch warnings.
+webhook_min_severity = error

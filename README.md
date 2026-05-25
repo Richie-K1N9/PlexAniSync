@@ -1,20 +1,14 @@
 # Plex to AniList Sync
-[![Build Status](https://travis-ci.com/RickDB/PlexAniSync.svg?branch=master)](https://travis-ci.com/RickDB/PlexAniSync) ![Docker](https://github.com/rickdb/Docker-PlexAniSync/actions/workflows/docker-publish.yml/badge.svg)
-
-[![Discord Shield](https://discordapp.com/api/guilds/903407293541023754/widget.png?style=banner2)](https://discord.gg/a9cu5t5fKc)
 
 ![Logo](logo.png)
 
 
-If you manage your Anime with Plex this will allow you to sync your libraries to [AniList](https://anilist.co)  , recommend using Plex with the [HAMA agent](https://github.com/ZeroQI/Hama.bundle) for best Anime name matches.
+If you manage your Anime with Plex this will allow you to sync your libraries to [AniList](https://anilist.co), recommend using Plex with the [HAMA agent](https://github.com/ZeroQI/Hama.bundle) for best Anime name matches.
 
-Unwatched Anime in Plex will not be synced so only those that have at least one watched episode, updates to AniList are only send with changes so need to worry about messing up watch history.
-
-
-This version is based on my previous project  [PlexMalSync](https://github.com/RickDB/PlexMALSync) which due to MAL closing their API is no longer working, this might change in the future and if it does will resume working on that again as as well.
+Unwatched Anime in Plex will not be synced so only those that have at least one watched episode, updates to AniList are only sent with changes so no need to worry about messing up watch history.
 
 
-**If you want test it out first without updating your actual AniList entries check out ``Skip list updating for testing `` from the ``Optional features`` section of this readme**
+**If you want to test it out first without updating your actual AniList entries check out `Skip list updating for testing` from the `Optional features` section of this readme**
 
 ## Setup
 
@@ -27,9 +21,7 @@ Make sure you have Python 3.9 or higher installed:
 
 ### Step 2 - Download project files
 
-Get the latest version using your favorite git client or by downloading the latest release from here:
-
-https://github.com/RickDB/PlexAniSync/archive/master.zip
+Get the latest version using your favorite git client, or download the latest release as a zip from your fork's releases page.
 
 
 ### Step 3 - Configuration
@@ -146,8 +138,6 @@ Now that configuration is finished and requirements have been installed we can f
 `python PlexAniSync.py`
 
 Depending on library size and server can take a few minutes to finish, for scheduled syncing you can create a cronjob, systemd timer or windows task which runs it every 30 minutes for instance.
-
-See [Systemd service](https://github.com/RickDB/PlexAniSync/wiki/Systemd-service) for a tutorial on how to set up a timer with systemd.
 
 ## Optional features
 
@@ -275,6 +265,52 @@ In all cases, Anilist stores the raw value of 75, so you can change the scoring 
 
 In your settings file there's a setting called `skip_list_update` which you can set to True or False, if set to True it will **NOT** update your AniList which is useful if you want to do a test run to check if everything lines up properly.
 
+### Local cache (reduces AniList API pressure)
+
+A SQLite-backed cache trims redundant calls to the AniList API across repeat
+syncs. After the first run, subsequent syncs only re-fetch your *active* lists
+(CURRENT, REPEATING, PAUSED) from AniList and reuse cached COMPLETED / DROPPED /
+PLANNING entries — and shows whose Plex state hasn't changed are skipped
+entirely without a server round-trip.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `cache_db_path` | `plexanisync_cache.db` | Path to the SQLite file. Set to empty string or `:memory:` to disable persistence. |
+| `anilist_cache_full_refresh_hours` | `24` | How often to do a full AniList list refresh, picking up changes you made from other devices. |
+| `cache_max_age_days` | `14` | Hard expiry — wipe the cache after this many days regardless of restarts. |
+| `cache_session_marker_path` | system tempdir | Marker file used to detect container/host restarts. Cache is wiped when this file is missing or its content no longer matches the stored session id. |
+| `batch_episode_updates` | `False` | When enabled, collapse per-episode incremental updates into a single mutation per show. Loses per-episode entries in the AniList activity feed but cuts mutations dramatically during catch-up syncs. |
+
+To wipe the cache manually: stop the sync and `rm plexanisync_cache.db`. The
+next run rebuilds from scratch.
+
+### Webhook notifications for failures
+
+PlexAniSync can POST a summary of notable failures to a webhook URL at the end
+of every sync (one request per run, batched). Rate-limit waits are deliberately
+**not** included — those are routine and handled transparently.
+
+| Setting | Default | What it does |
+|---|---|---|
+| `webhook_url` | empty | When non-empty, enables the notifier. POSTs JSON to this URL. |
+| `webhook_format` | `discord` | `discord` sends `{"content": ...}`, `slack` sends `{"text": ...}`. |
+| `webhook_min_severity` | `error` | Set to `warning` to also include year-mismatch warnings. |
+
+Events forwarded: year mismatch (sync skipped), failed to find title on
+AniList, authentication failures, and any per-show unhandled exception.
+
+### Resilient retries
+
+The sync wraps each show in its own try/except so one bad request (rate-limit
+exhaustion, network blip, AniList 500) skips only that show — the rest of your
+library still syncs. Tune the retry envelope with:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `max_rate_limit_retries` | `8` | Maximum 429 retries for a single request before giving up on that show. |
+| `max_rate_limit_wait_seconds` | `300` | Cap on AniList's `retry-after` header — refuse to sleep longer than this on one wait. |
+| `max_transient_error_retries` | `10` | Retries for transient (non-429, non-terminal) errors. Backoff is exponential, capped at 60s. |
+
 ### Tautulli Sync Helper script
 
 In the project folder you will find `TautulliSyncHelper.py` which you can use to sync a single Plex show to AniList for use in Tautulli script notifcations (trigger on playback stop).
@@ -283,43 +319,17 @@ Usage is as follows:
 
 `python TautulliSyncHelper.py <plex show name>`
 
-Depending on your OS make sure to place the show name between single or double quotes, for more information see the wiki page:
-
-https://github.com/RickDB/PlexAniSync/wiki/Tautulli-sync-script
+Depending on your OS make sure to place the show name between single or double quotes.
 
 ## Docker
 
-PlexAniSync is available as Docker image.
+A Dockerfile is included for building your own image. See [Docker/PlexAniSync/README.md](Docker/PlexAniSync/README.md) for runtime configuration and [BUILDING.md](BUILDING.md) for build/publish instructions.
 
-[PlexAniSync](https://github.com/RickDB/PlexAniSync/pkgs/container/plexanisync)<br/>
-[Documentation](Docker/PlexAniSync/README.md)
-
-Another docker container for Tautulli with built-in PlexAniSync can be found here:<br/>
-[Tautulli-PlexAniSync](https://github.com/RickDB/PlexAniSync/pkgs/container/tautulli-plexanisync)<br/> 
-[Documentation](Docker/Tautulli/README.md)
+A `docker-compose.yml` template is provided at the repository root for the common case (single sync container with hourly interval).
 
 ## Requirements
 
-[Python 3.8 or higher](https://www.python.org/)
-
-## Support
-
-**AniList**
-
-https://anilist.co/forum/thread/6443
-
-**Discord**
-
-https://discord.gg/a9cu5t5fKc
-
-## Planned
-
-Currently planned for future releases:
-
-- [ ] XREF title matching based on HAMA which uses custom lists and AniDB
-- [ ] Add setting to skip updating shows with dropped state on user list
-- [ ] Ignore anime list support (based on content rating and / or title)
-- [ ] Improve error handling
+[Python 3.9 or higher](https://www.python.org/)
 
 ## Credits
 

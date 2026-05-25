@@ -39,4 +39,5 @@ COPY plexanisync /plexanisync/plexanisync
 WORKDIR /app
 
 LABEL autoheal=true
-LABEL org.opencontainers.image.documentation=https://github.com/RickDB/PlexAniSync/blob/master/Docker/Tautulli/README.md
+LABEL org.opencontainers.image.documentation=https://github.com/Richie-K1N9/PlexAniSync/blob/master/Docker/Tautulli/README.md
+LABEL org.opencontainers.image.source=https://github.com/Richie-K1N9/PlexAniSync

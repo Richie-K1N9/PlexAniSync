@@ -10,3 +10,8 @@ logo\.psd
 settings\.ini
 update_anilist\.bat
 update_anilist_test\.bat
+\.env
+plexanisync_cache\.db
+plexanisync_cache\.db-journal
+plexanisync_cache\.db-wal
+plexanisync_cache\.db-shm

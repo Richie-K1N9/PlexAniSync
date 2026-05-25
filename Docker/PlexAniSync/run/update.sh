@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "Updating PlexAniSync"
-wget https://github.com/RickDB/PlexAniSync/archive/master.zip &&\
+wget https://github.com/Richie-K1N9/PlexAniSync/archive/master.zip &&\
 unzip master.zip &&\
 rm master.zip &&\
 cp -f /PlexAniSync-master/*.py /plexanisync

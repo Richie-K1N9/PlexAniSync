@@ -12,7 +12,7 @@ cronjob:
   startingDeadlineSeconds: 300
   successfulJobsHistoryLimit: 1
 
-image: ghcr.io/rickdb/plexanisync:latest
+image: ghcr.io/richie-k1n9/plexanisync:latest
 
 resources:
   limits:

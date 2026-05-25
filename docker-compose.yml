@@ -1,0 +1,65 @@
+# PlexAniSync — sample docker-compose configuration.
+#
+# Quick start:
+#   1. Copy this file as-is (or rename to compose.yaml).
+#   2. Copy .env.example to .env and fill in your tokens/URLs.
+#   3. (Optional) Place a custom_mappings.yaml next to this file.
+#   4. docker compose up -d
+#
+# To build your own image instead of pulling the published one,
+# uncomment the `build:` block and comment out the `image:` line.
+# See BUILDING.md for full build/publish instructions.
+
+services:
+  plexanisync:
+    container_name: plexanisync
+    image: ghcr.io/richie-k1n9/plexanisync:latest
+    # build:
+    #   context: .
+    #   dockerfile: Docker/PlexAniSync/Dockerfile
+    restart: unless-stopped
+    environment:
+      # --- Required ---
+      PLEX_SECTION: ${PLEX_SECTION:-Anime}
+      PLEX_URL: ${PLEX_URL}
+      PLEX_TOKEN: ${PLEX_TOKEN}
+      ANI_USERNAME: ${ANI_USERNAME}
+      ANI_TOKEN: ${ANI_TOKEN}
+
+      # --- Sync cadence ---
+      INTERVAL: ${INTERVAL:-3600}                       # seconds between syncs; <= 0 = run once and exit
+
+      # --- Existing behaviour knobs (optional) ---
+      PLEX_EPISODE_COUNT_PRIORITY: ${PLEX_EPISODE_COUNT_PRIORITY:-False}
+      SKIP_LIST_UPDATE: ${SKIP_LIST_UPDATE:-False}
+      LOG_FAILED_MATCHES: ${LOG_FAILED_MATCHES:-False}
+      SYNC_RATINGS: ${SYNC_RATINGS:-False}
+
+      # --- Cache (optional, defaults are sensible) ---
+      CACHE_DB_PATH: ${CACHE_DB_PATH:-plexanisync_cache.db}
+      ANILIST_CACHE_TTL_HOURS: ${ANILIST_CACHE_TTL_HOURS:-24}
+      CACHE_MAX_AGE_DAYS: ${CACHE_MAX_AGE_DAYS:-14}
+      CACHE_SESSION_MARKER_PATH: ${CACHE_SESSION_MARKER_PATH:-/tmp/plexanisync_session}
+      BATCH_EPISODE_UPDATES: ${BATCH_EPISODE_UPDATES:-False}
+
+      # --- Retry envelope (optional) ---
+      MAX_RATE_LIMIT_RETRIES: ${MAX_RATE_LIMIT_RETRIES:-8}
+      MAX_RATE_LIMIT_WAIT_SECONDS: ${MAX_RATE_LIMIT_WAIT_SECONDS:-300}
+      MAX_TRANSIENT_ERROR_RETRIES: ${MAX_TRANSIENT_ERROR_RETRIES:-10}
+
+      # --- Webhook notifications (optional) ---
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      WEBHOOK_FORMAT: ${WEBHOOK_FORMAT:-discord}
+      WEBHOOK_MIN_SEVERITY: ${WEBHOOK_MIN_SEVERITY:-error}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      # Optional: provide a custom_mappings.yaml from the host.
+      # - ./custom_mappings.yaml:/plexanisync/custom_mappings.yaml:ro
+      # Optional: persist the cache file between cron iterations within one container.
+      # The cache is also wiped on container restart (via /tmp marker) and after
+      # CACHE_MAX_AGE_DAYS regardless, so persisting only helps if INTERVAL is short.
+      # - plexanisync_cache:/plexanisync/data
+      #   ↑ pair this with CACHE_DB_PATH=/plexanisync/data/plexanisync_cache.db
+
+# volumes:
+#   plexanisync_cache:

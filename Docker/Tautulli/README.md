@@ -19,7 +19,7 @@ docker run -d \
   -v <path to tautulli data directory>:/config \
   -v <path to custom_mappings.yaml>:/plexanisync/custom_mappings.yaml \
   --restart unless-stopped \
-  ghcr.io/rickdb/tautulli-plexanisync
+  ghcr.io/richie-k1n9/tautulli-plexanisync
 ```
 
 ### Docker Compose
@@ -29,7 +29,7 @@ version: '3.7'
 services:
   plexanisync:
     container_name: tautulli-plexanisync
-    image: 'ghcr.io/rickdb/tautulli-plexanisync:latest'
+    image: 'ghcr.io/richie-k1n9/tautulli-plexanisync:latest'
     restart: unless-stopped
     environment:
       - TZ=<timezone>
@@ -53,7 +53,7 @@ Since this is a combination of docker images, environment variables of both imag
 See:
 
 - [Tautulli](https://github.com/Tautulli/Tautulli-Wiki/wiki/Installation#docker)
-- [PlexAniSync](https://github.com/RickDB/PlexAniSync/Docker/PlexAniSync/README.md#environment-variables)
+- [PlexAniSync](https://github.com/Richie-K1N9/PlexAniSync/blob/master/Docker/PlexAniSync/README.md#environment-variables)
 
 ### Configure Tautulli to use PlexAniSync
 
@@ -61,6 +61,6 @@ After starting the container, Tautulli will be available on the configured port.
 
 If you have never configured Tautulli, a setup guide will ask you to set up the connection to the Plex server.
 
-Once the guide is done, follow the instructions [here](https://github.com/RickDB/PlexAniSync/wiki/Tautulli-sync-script) to set up the PlexAniSync notification agent.
+Once the guide is done, configure the PlexAniSync notification agent in Tautulli to call `/plexanisync/TautulliSyncHelper.py` with the show title as its argument on playback-stop events.
 
 Use `/plexanisync` as script folder. Do NOT rename TautulliSyncHelper.py to .pyw, otherwise Tautulli won't be able to start it.
