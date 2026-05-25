@@ -25,12 +25,16 @@ jobs:
 
     steps:
         # Set IMAGE_NAMES to ghcr.io, additionally add docker.io if building a tag or master
+        # AND the DOCKERHUB_USERNAME secret is configured (so forks without Docker Hub
+        # credentials only publish to ghcr.io).
         # Limit platforms to amd64 if building for pull requests
       - name: Set variables
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
           echo "IMAGE_NAMES<<$EOF" >> $GITHUB_ENV
-          if [[ ${{ github.ref }} == *"refs/tags/"* ]] || [[ ${{ github.ref }} == "refs/heads/master" ]]; then
+          if [[ -n "$DOCKERHUB_USERNAME" ]] && ( [[ ${{ github.ref }} == *"refs/tags/"* ]] || [[ ${{ github.ref }} == "refs/heads/master" ]] ); then
             DOCKER_IO=true
             echo "${{ inputs.imagename }}" >> $GITHUB_ENV
           fi
