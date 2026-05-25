@@ -70,7 +70,7 @@ class Anilist:
         return anilist_series
 
     def __fetch_with_cache(self, username: str) -> List[AnilistSeries]:
-        logger.info("Using cached AniList list; refreshing active entries only")
+        logger.info(f"Using cached AniList list for {username}; refreshing active entries only")
         active_entries = self.graphql.fetch_user_list_filtered(list(ACTIVE_STATUSES))
         cached_entries = self.cache.get_cached_entries(exclude_statuses=ACTIVE_STATUSES)
 

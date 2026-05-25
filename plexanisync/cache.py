@@ -112,17 +112,17 @@ class SyncCache:
         if age_exceeded:
             logger.info(f"Cache exceeded max age ({self.max_age_seconds // 86400}d), wiping")
             self._wipe(now)
-            self._rotate_session_marker(now)
+            self._rotate_session_marker()
             return
 
         if self._restart_detected():
             logger.info("Container/host restart detected, wiping cache")
             self._wipe(now)
-            self._rotate_session_marker(now)
+            self._rotate_session_marker()
             return
 
         if self._get_meta("session_id") is None:
-            self._rotate_session_marker(now)
+            self._rotate_session_marker()
 
     def _restart_detected(self) -> bool:
         stored_session = self._get_meta("session_id")
@@ -135,7 +135,7 @@ class SyncCache:
             return True
         return marker_session != stored_session
 
-    def _rotate_session_marker(self, now: int):
+    def _rotate_session_marker(self):
         new_session = str(uuid.uuid4())
         self._set_meta("session_id", new_session)
         try:
