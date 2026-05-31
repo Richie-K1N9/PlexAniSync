@@ -143,6 +143,8 @@ def __add_mappings(custom_mappings: Dict[str, List[AnilistCustomMapping]],
                    mapping_location, file_mappings):
     # handles missing and empty 'entries'
     entries = file_mappings.get('entries', []) or []
+    added = 0
+    overwritten = 0
     for file_entry in entries:
         series_title = str(file_entry['title'])
         synonyms: List[str] = file_entry.get('synonyms', [])
@@ -161,21 +163,24 @@ def __add_mappings(custom_mappings: Dict[str, List[AnilistCustomMapping]],
             logger.debug(f"{series_title} has synonyms: {synonyms}")
 
         if guid:
-            # store the mapping under the guid if one is set
             custom_mappings[guid] = series_mappings
 
         for title in [series_title] + synonyms:
             title_lower = title.lower()
             if title_lower in custom_mappings:
-                logger.info(f"Overwriting previous mapping for {title}")
+                overwritten += 1
+                logger.debug(f"Overwriting previous mapping for {title}")
                 if title_lower in title_guid_mappings and not guid:
-                    # if the current mapping doesn't have a guid, remove the guid mapping with the same title
-                    # this ensures that users can override community mappings without specifying the guid field
                     custom_mappings.pop(title_guid_mappings[title_lower], None)
+            else:
+                added += 1
             custom_mappings[title_lower] = series_mappings
 
             if guid:
                 title_guid_mappings[title_lower] = guid
+
+    overwrite_note = f", {overwritten} overwriting earlier entries" if overwritten else ""
+    logger.info(f"Loaded {added} mappings from {mapping_location}{overwrite_note}")
 
 
 # Get the custom mappings from the web.

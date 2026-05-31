@@ -681,9 +681,22 @@ class Anilist:
                         "The Anilist score will be updated to the Plex rating."
                     )
                     self.graphql.update_score(series.anilist_id, plex_rating)
+                elif (
+                    watched_episode_count > series.progress
+                    and series.episodes
+                    and series.progress < series.episodes
+                ):
+                    # COMPLETED at wrong progress — Plex has more episodes than AniList recorded.
+                    # This needs manual correction on AniList (e.g. prologue not counted).
+                    logger.warning(
+                        f"'{title}' is marked COMPLETED on AniList at {series.progress}/{series.episodes} "
+                        f"but Plex reports {watched_episode_count} watched — fix progress on AniList manually",
+                        extra={NOTIFY_FLAG: True, NOTIFY_CATEGORY: CATEGORY_SHOW_ERROR},
+                    )
                 else:
-                    logger.debug(
-                        "Series is already marked as completed on AniList so skipping update"
+                    logger.info(
+                        f"'{title}' is already completed on AniList "
+                        f"({series.progress}/{series.episodes}) — skipping"
                     )
                 self.__record_sync_success(plex_guid, season_number, series.anilist_id, title, watched_episode_count, plex_rating)
                 return
