@@ -64,6 +64,8 @@ def start():
         logger.warning(
             "AniList skip list update enabled in settings, will match but NOT update your list"
         )
+    else:
+        logger.info("AniList live sync active — updates WILL be written to your AniList")
 
     if anilist_settings.getboolean("plex_episode_count_priority", False):
         logger.warning(

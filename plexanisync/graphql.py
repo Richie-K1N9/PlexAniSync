@@ -75,7 +75,13 @@ class GraphQL:
             timeout=10,  # seconds,
             session=requests.Session()
         )
-        self.endpoint.logger = logger
+        # Silence sgqlc's built-in endpoint logger — it dumps every response
+        # header on errors (very noisy on 429s). Our __send_graphql_request
+        # already produces the only log lines that matter.
+        _silent = logging.getLogger("sgqlc.endpoint.requests")
+        _silent.addHandler(logging.NullHandler())
+        _silent.propagate = False
+        self.endpoint.logger = _silent
         self.skip_list_update = self.anilist_settings.getboolean("skip_list_update", False)
         self.sync_ratings = self.anilist_settings.getboolean("sync_ratings", False)
         self.max_rate_limit_retries = self.anilist_settings.getint("max_rate_limit_retries", 8)

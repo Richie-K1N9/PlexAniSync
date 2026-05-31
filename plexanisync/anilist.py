@@ -139,7 +139,7 @@ class Anilist:
 
         custom_mapped_seasons = []
 
-        logger.info("--------------------------------------------------")
+        logger.debug("--------------------------------------------------")
 
         # Check if we have custom mappings for all seasons (One Piece for example)
         if len(plex_seasons) > 1:
@@ -202,7 +202,9 @@ class Anilist:
                     True,
                     match.watched_episodes,
                     match.anilist_id,
-                    average_season_rating or plex_show_rating
+                    average_season_rating or plex_show_rating,
+                    season_number=match.mapped_seasons[0] if match.mapped_seasons else None,
+                    plex_guid=plex_guid,
                 )
 
         # Start processing of any remaining seasons
@@ -576,7 +578,10 @@ class Anilist:
             cached_state = self.cache.lookup_state(anime_id, season_number)
             if cached_state == (watched_episodes, plex_rating):
                 cached_series = self.__find_mapped_series(anilist_series, anime_id)
-                if cached_series and cached_series.progress == watched_episodes:
+                if cached_series and (
+                    cached_series.progress == watched_episodes
+                    or cached_series.status == "COMPLETED"
+                ):
                     logger.debug(
                         f"State unchanged for anilist id {anime_id} season {season_number}, skipping"
                     )
